@@ -1,0 +1,51 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "files.associations": {
+    "touch_cst328.h": "c",
+    "esp_lcd_ili9341.h": "c",
+    "esp_lcd_panel_commands.h": "c",
+    "esp_lcd_st7789.h": "c",
+    "esp_lcd_touch_stmpe610.h": "c",
+    "esp_lcd_panel_io.h": "c",
+    "touch_cst328_reg.h": "c",
+    "esp_lcd_touch.h": "c",
+    "thread": "c",
+    "*.tcc": "c",
+    "i2c.h": "c",
+    "esp_check.h": "c",
+    "lvgl.h": "c",
+    "lv_obj.h": "c",
+    "lv_group.h": "c",
+    "lv_hal.h": "c",
+    "lv_obj_style.h": "c",
+    "lv_style.h": "c",
+    "clk_tree_defs.h": "c",
+    "numbers": "c",
+    "ratio": "c",
+    "vernon_st7789t.h": "c",
+    "ws_lcd.h": "c",
+    "sdmmc_cmd.h": "c",
+    "st7789.h": "c",
+    "esp_lcd_types.h": "c",
+    "esp_err.h": "c",
+    "stdbool.h": "c",
+    "lvgl_driver.h": "c",
+    "esp_lcd_panel_interface.h": "c",
+    "lv_demos.h": "c"
+  },
+  "idf.adapterTargetName": "esp32c6",
+  "idf.openOcdConfigs": [
+    "board/esp32c6-builtin.cfg"
+  ],
+  "idf.portWin": "COM9",
+  "idf.flashType": "UART",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32c6"
+  },
+  "clangd.path": "C:\\Users\\Elephant\\.espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=C:\\Users\\Elephant\\.espressif\\tools\\riscv32-esp-elf\\esp-14.2.0_20241119\\riscv32-esp-elf\\bin\\riscv32-esp-elf-gcc.exe",
+    "--compile-commands-dir=d:\\soft\\ESP32-C6-LCD-1.47-Test\\build"
+  ]
+}
