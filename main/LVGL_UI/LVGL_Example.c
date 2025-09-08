@@ -4,7 +4,6 @@
 #include <string.h>
 #include "esp_log.h"
 
-static const char *DATA_TAG = "DATA";
 
 /**********************
  *  STATIC VARIABLES
@@ -12,14 +11,14 @@ static const char *DATA_TAG = "DATA";
 // 定义各种样式对象
 static lv_style_t style_value_box;          // 值框样式
 static lv_style_t style_editable_box;       // 可编辑框样式
-static lv_style_t style_editable_box_focus; // 可编辑框焦点样式（高亮）
 static lv_style_t style_axis_label;         // 坐标轴标签样式
 static lv_style_t style_left_label;         // 左侧标签样式
 static lv_style_t style_centering_label;    // 分中标签样式
 static lv_style_t style_ok_button;          // OK按钮样式
-static lv_style_t style_ok_button_focus;    // OK按钮焦点样式
 static lv_style_t style_number_label;       // 数字标签样式
 static lv_style_t style_axis_label_small;   // 小号坐标轴标签样式
+static lv_style_t style_highlight_box;      // 高亮框样式
+static lv_style_t style_highlight_button;   // 高亮按钮样式
 
 // 坐标显示对象
 static lv_obj_t *mechanical_x;      // 机械坐标X
@@ -43,17 +42,7 @@ static float workpiece_coords[3] = {0.0f, 0.0f, 0.0f};  // 工件坐标X, Y, Z
 // 外部声明的拨档状态变量（来自编码器代码）
 extern volatile int current_axis; // 当前选择的轴 (0=X, 1=Y, 2=Z, 3=A)
 
-// 功能按键状态
-volatile bool func_btn_pressed = false;
-static int current_focus = 0; // 0: 分中值1, 1: 分中值2
 
-// 防止重复处理标志
-static bool processing_func_btn = false;
-
-// UART数据缓冲区
-#define UART_BUFFER_SIZE 256
-static char uart_buffer[UART_BUFFER_SIZE];
-static int uart_buffer_index = 0;
 
 /**********************
  *  STATIC FUNCTIONS
@@ -88,26 +77,6 @@ static void create_styles(void)
     lv_style_set_width(&style_editable_box, 55);  // 设置宽度
     lv_style_set_height(&style_editable_box, 20); // 设置高度
 
-    // 可编辑框焦点样式（高亮）
-    lv_style_init(&style_editable_box_focus);
-    lv_style_set_border_color(&style_editable_box_focus, lv_color_hex(0xFF0000)); // 红色边框
-    lv_style_set_border_width(&style_editable_box_focus, 2); // 更粗的边框
-    lv_style_set_radius(&style_editable_box_focus, 3);
-    lv_style_set_bg_color(&style_editable_box_focus, lv_color_hex(0xFFFFFF));
-    lv_style_set_text_font(&style_editable_box_focus, &lv_font_montserrat_12);
-    lv_style_set_pad_all(&style_editable_box_focus, 2);
-    lv_style_set_width(&style_editable_box_focus, 55);
-    lv_style_set_height(&style_editable_box_focus, 20);
-
-     // OK按钮焦点样式（高亮）
-    lv_style_init(&style_ok_button_focus);
-    lv_style_set_radius(&style_ok_button_focus, 9);
-    lv_style_set_bg_color(&style_ok_button_focus, lv_color_hex(0x4CAF50)); // 绿色背景
-    lv_style_set_text_color(&style_ok_button_focus, lv_color_white()); // 白色文字
-    lv_style_set_text_font(&style_ok_button_focus, &lv_font_montserrat_12);
-    lv_style_set_pad_all(&style_ok_button_focus, 0);
-    lv_style_set_width(&style_ok_button_focus, 220);
-    lv_style_set_height(&style_ok_button_focus, 18);
     
     // 轴标签样式 - 用于X、Y、Z轴标签
     lv_style_init(&style_axis_label);
@@ -147,6 +116,27 @@ static void create_styles(void)
     lv_style_set_text_font(&style_axis_label_small, &lv_font_montserrat_12);
     lv_style_set_text_color(&style_axis_label_small, lv_color_black());
     lv_style_set_width(&style_axis_label_small, 12);
+    
+    // 高亮框样式 - 用于高亮显示当前选中的文本框
+    lv_style_init(&style_highlight_box);
+    lv_style_set_border_color(&style_highlight_box, lv_color_hex(0xFF6B35)); // 橙色边框表示高亮
+    lv_style_set_border_width(&style_highlight_box, 2);                      // 加粗边框
+    lv_style_set_radius(&style_highlight_box, 3);
+    lv_style_set_bg_color(&style_highlight_box, lv_color_hex(0xFFF3E0));     // 浅橙色背景
+    lv_style_set_text_font(&style_highlight_box, &lv_font_montserrat_12);
+    lv_style_set_pad_all(&style_highlight_box, 2);
+    lv_style_set_width(&style_highlight_box, 55);
+    lv_style_set_height(&style_highlight_box, 20);
+    
+    // 高亮按钮样式 - 用于高亮显示当前选中的OK按钮
+    lv_style_init(&style_highlight_button);
+    lv_style_set_radius(&style_highlight_button, 9);
+    lv_style_set_bg_color(&style_highlight_button, lv_color_hex(0xFF6B35));  // 橙色背景
+    lv_style_set_text_color(&style_highlight_button, lv_color_white());      // 白色文字
+    lv_style_set_text_font(&style_highlight_button, &lv_font_montserrat_12);
+    lv_style_set_pad_all(&style_highlight_button, 0);
+    lv_style_set_width(&style_highlight_button, 240);
+    lv_style_set_height(&style_highlight_button, 18);
 }
 
 
@@ -164,139 +154,11 @@ static char get_current_axis_char(void)
     }
 }
 
-static void parse_coordinates(const char* data)
-{
-    // 查找MPos和WPos的位置
-    const char* mpos_start = strstr(data, "MPos:");
-    const char* wpos_start = strstr(data, "WPos:");
-    
-    if (mpos_start && wpos_start) {
-        // 解析机械坐标
-        if (sscanf(mpos_start + 5, "%f,%f,%f", 
-                  &mechanical_coords[0], 
-                  &mechanical_coords[1], 
-                  &mechanical_coords[2]) == 3) {
-            // 解析成功
-        }
-        
-        // 解析工件坐标
-        if (sscanf(wpos_start + 5, "%f,%f,%f", 
-                  &workpiece_coords[0], 
-                  &workpiece_coords[1], 
-                  &workpiece_coords[2]) == 3) {
-            // 解析成功
-        }
-    }
-}
-
 /**
- * @brief 处理UART接收到的数据
+ * @brief UI状态更新：根据当前轴与功能键状态刷新标签与高亮
  */
-void process_uart_data(const char* data, int length)
+void ui_update_on_state_change(void)
 {
-    ESP_LOGI(DATA_TAG, "Processing data: %.*s", length, data);
-    // 将数据添加到缓冲区
-    for (int i = 0; i < length; i++) {
-        if (uart_buffer_index < UART_BUFFER_SIZE - 1) {
-            uart_buffer[uart_buffer_index++] = data[i];
-            
-            // 检查是否收到完整的指令帧（以'>'结尾）
-            if (data[i] == '>') {
-                uart_buffer[uart_buffer_index] = '\0'; // 添加字符串结束符
-
-                // 调试输出：打印接收到的指令帧
-               printf("Received: %s\n", uart_buffer);
-                
-                // 解析坐标数据
-                parse_coordinates(uart_buffer);
-                
-                // 重置缓冲区
-                uart_buffer_index = 0;
-            }
-        } else {
-            // 缓冲区溢出，重置
-            uart_buffer_index = 0;
-        }
-    }
-}
-
-/**
- * @brief 切换焦点到下一个文本框
- */
-static void switch_focus(void)
-{
-    // 移除当前焦点样式
-    switch (current_focus) {
-        case 0: // 当前焦点在分中值1文本框
-            lv_obj_remove_style(centering1_value, &style_editable_box_focus, 0);
-            lv_obj_add_style(centering1_value, &style_editable_box, 0);
-            break;
-        case 1: // 当前焦点在分中值2文本框
-            lv_obj_remove_style(centering2_value, &style_editable_box_focus, 0);
-            lv_obj_add_style(centering2_value, &style_editable_box, 0);
-            break;
-        case 2: // 当前焦点在OK按钮
-            lv_obj_remove_style(ok_button, &style_ok_button_focus, 0);
-            lv_obj_add_style(ok_button, &style_ok_button, 0);
-            break;
-    }
-    
-    // 切换到下一个焦点 (0=分中值1, 1=分中值2, 2=OK按钮)
-    current_focus = (current_focus + 1) % 3;
-    
-    // 应用新焦点样式
-    switch (current_focus) {
-        case 0: // 焦点切换到分中值1文本框
-            lv_obj_remove_style(centering1_value, &style_editable_box, 0);
-            lv_obj_add_style(centering1_value, &style_editable_box_focus, 0);
-            break;
-        case 1: // 焦点切换到分中值2文本框
-            lv_obj_remove_style(centering2_value, &style_editable_box, 0);
-            lv_obj_add_style(centering2_value, &style_editable_box_focus, 0);
-            break;
-        case 2: // 焦点切换到OK按钮
-            lv_obj_remove_style(ok_button, &style_ok_button, 0);
-            lv_obj_add_style(ok_button, &style_ok_button_focus, 0);
-            break;
-    }
-}
-
-/**
- * @brief 定时器回调函数，用于更新显示的数据
- * 根据拨档状态更新界面显示
- * @param timer 定时器对象
- */
-static void update_display_cb(lv_timer_t *timer)
-{
-    // 检查功能按键是否被按下
-    if (func_btn_pressed) {
-        func_btn_pressed = false;
-        switch_focus();
-    }
-
-    // 更新显示
-    char buf[16];
-    
-    // 更新机械坐标（使用从UART解析的数据）
-    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[0]);
-    lv_label_set_text(mechanical_x, buf);
-    
-    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[1]);
-    lv_label_set_text(mechanical_y, buf);
-    
-    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[2]);
-    lv_label_set_text(mechanical_z, buf);
-    
-    // 更新工件坐标（使用从UART解析的数据）
-    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[0]);
-    lv_label_set_text(workpiece_x, buf);
-    
-    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[1]);
-    lv_label_set_text(workpiece_y, buf);
-    
-    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[2]);
-    lv_label_set_text(workpiece_z, buf);
-
     // 根据拨档状态更新轴标签 更新分中值
     char axis_char = get_current_axis_char();
     char axis_buf[2] = {axis_char, '\0'};
@@ -309,10 +171,45 @@ static void update_display_cb(lv_timer_t *timer)
     // 更新分中值2轴标签
     char axis_buf2[2] = {axis_char, '\0'};
     lv_label_set_text(axis_label_small2, axis_buf2);
-}
-void handle_func_button(void) //功能按键事件处理
-{
-    func_btn_pressed = true;
+    
+    // 根据功能按键状态更新高亮显示
+    switch (func_btn_current_state) {
+        case FUNC_BTN_STATE_CENTERING1:
+            // 高亮分中值1文本框
+            lv_obj_remove_style(centering1_value, &style_editable_box, 0);
+            lv_obj_add_style(centering1_value, &style_highlight_box, 0);
+            // 恢复分中值2文本框普通样式
+            lv_obj_remove_style(centering2_value, &style_highlight_box, 0);
+            lv_obj_add_style(centering2_value, &style_editable_box, 0);
+            // 恢复OK按钮普通样式
+            lv_obj_remove_style(ok_button, &style_highlight_button, 0);
+            lv_obj_add_style(ok_button, &style_ok_button, 0);
+            break;
+            
+        case FUNC_BTN_STATE_CENTERING2:
+            // 恢复分中值1文本框普通样式
+            lv_obj_remove_style(centering1_value, &style_highlight_box, 0);
+            lv_obj_add_style(centering1_value, &style_editable_box, 0);
+            // 高亮分中值2文本框
+            lv_obj_remove_style(centering2_value, &style_editable_box, 0);
+            lv_obj_add_style(centering2_value, &style_highlight_box, 0);
+            // 恢复OK按钮普通样式
+            lv_obj_remove_style(ok_button, &style_highlight_button, 0);
+            lv_obj_add_style(ok_button, &style_ok_button, 0);
+            break;
+            
+        case FUNC_BTN_STATE_OK:
+            // 恢复分中值1文本框普通样式
+            lv_obj_remove_style(centering1_value, &style_highlight_box, 0);
+            lv_obj_add_style(centering1_value, &style_editable_box, 0);
+            // 恢复分中值2文本框普通样式
+            lv_obj_remove_style(centering2_value, &style_highlight_box, 0);
+            lv_obj_add_style(centering2_value, &style_editable_box, 0);
+            // 高亮OK按钮
+            lv_obj_remove_style(ok_button, &style_ok_button, 0);
+            lv_obj_add_style(ok_button, &style_highlight_button, 0);
+            break;
+    }
 }
 /**
  * @brief 创建旋转的容器来放置所有界面元素
@@ -663,7 +560,7 @@ static void create_rotated_container(lv_obj_t *parent)
     lv_obj_add_style(centering2_value, &style_editable_box, 0); // 应用样式
     
     // OK按钮
-    lv_obj_t *ok_button = lv_btn_create(centering_right);
+    ok_button = lv_btn_create(centering_right);
     lv_obj_clear_flag(ok_button, LV_OBJ_FLAG_SCROLLABLE); // 禁用滚动条
     lv_obj_add_style(ok_button, &style_ok_button, 0); // 应用样式
     //lv_obj_add_event_cb(ok_button, ok_button_event_cb, LV_EVENT_ALL, NULL); // 添加事件回调
@@ -677,8 +574,8 @@ static void create_rotated_container(lv_obj_t *parent)
     lv_label_set_text(ok_label, "Branch Center"); // 设置文本
     lv_obj_center(ok_label); // 居中显示
     
-    // 创建定时器更新显示
-    lv_timer_create(update_display_cb, 100, NULL);
+    // 初始化一次UI状态
+    ui_update_on_state_change();
 }
 
 /**
@@ -693,7 +590,72 @@ void coordinate_display_init(void)
     // 创建旋转的界面
     create_rotated_container(lv_scr_act());
 
-    // 设置初始焦点
-    current_focus = 0;
-    lv_obj_add_style(centering1_value, &style_editable_box_focus, 0);
+
+}
+
+
+// ==================== 更新分中值输入框 ====================
+void update_centering_values(void) {
+    char buffer[16];
+    
+    // 获取当前轴索引
+    int axis_index = get_current_axis_index();
+    
+    // 根据当前功能按键状态更新对应的分中值输入框
+    switch (func_btn_current_state) {
+        case FUNC_BTN_STATE_CENTERING1:
+            snprintf(buffer, sizeof(buffer), "%.3f", mechanical_coords[axis_index]);
+            lv_textarea_set_text(centering1_value, buffer);
+            break;
+        case FUNC_BTN_STATE_CENTERING2:
+            snprintf(buffer, sizeof(buffer), "%.3f", workpiece_coords[axis_index]);
+            lv_textarea_set_text(centering2_value, buffer);
+            break;
+        default:
+            break;
+    }
+}
+
+// ==================== 获取当前轴索引 ====================
+int get_current_axis_index(void) {
+    switch (current_axis) {
+        case 0: return 0;  // X轴
+        case 1: return 1;  // Y轴
+        case 2: return 2;  // Z轴
+        case 3: return 3;  // A轴
+        default: return 0; // 默认X轴
+    }
+}
+
+
+// ==================== 更新机械坐标 ====================
+void update_mechanical_coords(float x, float y, float z) {
+    mechanical_coords[0] = x;
+    mechanical_coords[1] = y;
+    mechanical_coords[2] = z;
+    
+    // 更新UI显示
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%.3f", x);
+    lv_label_set_text(mechanical_x, buffer);
+    snprintf(buffer, sizeof(buffer), "%.3f", y);
+    lv_label_set_text(mechanical_y, buffer);
+    snprintf(buffer, sizeof(buffer), "%.3f", z);
+    lv_label_set_text(mechanical_z, buffer);
+}
+
+// ==================== 更新工件坐标 ====================
+void update_workpiece_coords(float x, float y, float z) {
+    workpiece_coords[0] = x;
+    workpiece_coords[1] = y;
+    workpiece_coords[2] = z;
+    
+    // 更新UI显示
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%.3f", x);
+    lv_label_set_text(workpiece_x, buffer);
+    snprintf(buffer, sizeof(buffer), "%.3f", y);
+    lv_label_set_text(workpiece_y, buffer);
+    snprintf(buffer, sizeof(buffer), "%.3f", z);
+    lv_label_set_text(workpiece_z, buffer);
 }

@@ -27,6 +27,7 @@
 #define ESTOP_PIN GPIO_NUM_23
 #define ESTOP_DEBOUNCE_MS 50    // 防抖时间 50ms
 #define FUNC_BTN_PIN GPIO_NUM_20
+#define FUNC_BTN_DEBOUNCE_MS 500 // 功能键防抖 80ms
 
 // 全局变量声明
 static const char *TAG = "ENCODER";
@@ -35,14 +36,15 @@ static volatile bool estop_triggered = false;
 static void IRAM_ATTR estop_isr_handler(void* arg);
 static void IRAM_ATTR func_btn_isr_handler(void* arg);
 static volatile uint32_t last_estop_tick = 0;
+static volatile uint32_t last_func_btn_tick = 0;
 static volatile float axis_counts[4] = {0, 0, 0, 0};
 static volatile float axis_last_report[4] = {0, 0, 0, 0};
 volatile int current_axis = 0;
 static volatile float right_multiplier = 1.0f;
-static const char *UART_TAG = "UART";
 
-
-extern void process_uart_data(const char* data, int length);
+// 功能按键状态变量
+volatile func_btn_state_t func_btn_current_state = FUNC_BTN_STATE_CENTERING1;
+volatile bool func_btn_pressed = false;
 
 // ==================== 编码器初始化 ====================
 static void encoder_init(void) {
@@ -141,9 +143,27 @@ static void IRAM_ATTR estop_isr_handler(void* arg) {
 
 // ==================== 功能按键中断回调 ====================
 static void IRAM_ATTR func_btn_isr_handler(void* arg) {
+    // 中断级防抖
+    uint32_t now_tick = xTaskGetTickCountFromISR();
+    if ((now_tick - last_func_btn_tick) < pdMS_TO_TICKS(FUNC_BTN_DEBOUNCE_MS)) {
+        return;
+    }
+    last_func_btn_tick = now_tick;
     // 设置功能按键按下标志，供LVGL界面处理
-    extern volatile bool func_btn_pressed;
     func_btn_pressed = true;
+}
+
+// ==================== 长按检测 ====================
+static bool is_func_btn_long_pressed(void) {
+    // 检测功能按键是否长按2秒
+    uint32_t press_start_time = xTaskGetTickCount();
+    while (gpio_get_level(FUNC_BTN_PIN) == 0) {  // 按键被按下
+        vTaskDelay(pdMS_TO_TICKS(50));  // 每50ms检查一次
+        if ((xTaskGetTickCount() - press_start_time) >= pdMS_TO_TICKS(2000)) {  // 长按2秒
+            return true;
+        }
+    }
+    return false;
 }
 
 // ==================== 发送指令帧 ====================
@@ -168,38 +188,6 @@ static void send_command_frame(float scaled_steps, int axis_index) {
 
     uart_write_bytes(UART_PORT_NUM, cmd, strlen(cmd));
     //ESP_LOGI(TAG, "发送指令: %s", cmd);
-}
-
-// ==================== UART接收任务 ====================
-static void uart_receive_task(void *arg)
-{
-    uint8_t data[128];
-    //size_t len = 0;
-    while (1) {
-        int len = uart_read_bytes(UART_PORT_NUM, data, sizeof(data) - 1, 1000 / portTICK_PERIOD_MS);
-        //ESP_LOGI(TAG, "No data received, waiting...");
-        //ESP_ERROR_CHECK(uart_get_buffered_data_len(UART_PORT_NUM, &len));
-        if (len > 0) {
-            ESP_LOGI(TAG, "No data received, waiting...");
-            data[len] = '\0'; // 添加字符串结束符
-            //ESP_LOGI(UART_TAG, "Received %d bytes: %s", len, data);
-            
-            // 处理接收到的数据
-            process_uart_data((const char*)data, len);
-        } else if (len == 0) {
-            
-            ESP_LOGI(TAG, "received, waiting...");
-            // 超时，但没有收到数据
-            //ESP_LOGD(UART_TAG, "UART read timeout, no data received");
-        } else {
-            ESP_LOGI(TAG, " waiting...");
-            // 读取错误
-            //ESP_LOGE(UART_TAG, "UART read error: %d", len);
-        }
-        
-        // 短暂延迟，避免任务占用太多CPU时间
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
 }
 
 
@@ -339,7 +327,6 @@ void app_main(void)
     // 创建编码器任务
     xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
     xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
-    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 10, NULL);
 
     LCD_Init();
     BK_Light(50);
@@ -348,7 +335,55 @@ void app_main(void)
 
     lv_obj_add_flag(lv_layer_sys(), LV_OBJ_FLAG_HIDDEN);  // 隐藏性能监视器标签（FPS和CPU显示）
 
+    // 模拟机械坐标更新（测试用）
+    static float test_x = 0.0f, test_y = 0.0f, test_z = 0.0f;
+    
     while (1) {
+        // 处理功能按键状态切换
+        if (func_btn_pressed) {
+            func_btn_pressed = false;  // 清除按键标志
+            
+            // 检测长按
+            if (is_func_btn_long_pressed()) {
+                // 长按2秒，更新分中值输入框
+                update_centering_values();
+                
+                // 根据当前状态更新坐标
+                if (func_btn_current_state == FUNC_BTN_STATE_CENTERING1) {
+                    // 更新机械坐标
+                    update_mechanical_coords(test_x, test_y, test_z);
+                } else if (func_btn_current_state == FUNC_BTN_STATE_CENTERING2) {
+                    // 更新工件坐标
+                    update_workpiece_coords(test_x, test_y, test_z);
+                }
+            }
+            else {
+                // 短按，切换状态
+                func_btn_current_state = (func_btn_current_state + 1) % 3;
+                // 刷新UI高亮
+                ui_update_on_state_change();
+                
+                // 输出调试信息
+                switch (func_btn_current_state) {
+                case FUNC_BTN_STATE_CENTERING1:
+                       // ESP_LOGI(TAG, "功能按键: 切换到分中值1轴");
+                        break;
+                    case FUNC_BTN_STATE_CENTERING2:
+                        //ESP_LOGI(TAG, "功能按键: 切换到分中值2轴");
+                        break;
+                    case FUNC_BTN_STATE_OK:
+                       // ESP_LOGI(TAG, "功能按键: 切换到OK键");
+                        break;
+                }
+            }
+        }
+        
+        // 模拟机械坐标更新（测试用）
+        test_x += 0.001f;
+        test_y += 0.002f;
+        test_z += 0.003f;
+        update_mechanical_coords(test_x, test_y, test_z);
+        
         vTaskDelay(pdMS_TO_TICKS(10));
         lv_timer_handler();
     }
