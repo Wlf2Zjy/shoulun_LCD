@@ -2,6 +2,9 @@
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
+#include "esp_log.h"
+
+static const char *DATA_TAG = "DATA";
 
 /**********************
  *  STATIC VARIABLES
@@ -34,6 +37,9 @@ static lv_obj_t *ok_button;         // OK按钮对象
 static lv_obj_t *axis_label_small1; // 分中值1轴标签
 static lv_obj_t *axis_label_small2; // 分中值2轴标签
 
+static float mechanical_coords[3] = {0.0f, 0.0f, 0.0f}; // 机械坐标X, Y, Z
+static float workpiece_coords[3] = {0.0f, 0.0f, 0.0f};  // 工件坐标X, Y, Z
+
 // 外部声明的拨档状态变量（来自编码器代码）
 extern volatile int current_axis; // 当前选择的轴 (0=X, 1=Y, 2=Z, 3=A)
 
@@ -43,6 +49,11 @@ static int current_focus = 0; // 0: 分中值1, 1: 分中值2
 
 // 防止重复处理标志
 static bool processing_func_btn = false;
+
+// UART数据缓冲区
+#define UART_BUFFER_SIZE 256
+static char uart_buffer[UART_BUFFER_SIZE];
+static int uart_buffer_index = 0;
 
 /**********************
  *  STATIC FUNCTIONS
@@ -152,6 +163,63 @@ static char get_current_axis_char(void)
         default: return 'X'; // 默认返回X轴
     }
 }
+
+static void parse_coordinates(const char* data)
+{
+    // 查找MPos和WPos的位置
+    const char* mpos_start = strstr(data, "MPos:");
+    const char* wpos_start = strstr(data, "WPos:");
+    
+    if (mpos_start && wpos_start) {
+        // 解析机械坐标
+        if (sscanf(mpos_start + 5, "%f,%f,%f", 
+                  &mechanical_coords[0], 
+                  &mechanical_coords[1], 
+                  &mechanical_coords[2]) == 3) {
+            // 解析成功
+        }
+        
+        // 解析工件坐标
+        if (sscanf(wpos_start + 5, "%f,%f,%f", 
+                  &workpiece_coords[0], 
+                  &workpiece_coords[1], 
+                  &workpiece_coords[2]) == 3) {
+            // 解析成功
+        }
+    }
+}
+
+/**
+ * @brief 处理UART接收到的数据
+ */
+void process_uart_data(const char* data, int length)
+{
+    ESP_LOGI(DATA_TAG, "Processing data: %.*s", length, data);
+    // 将数据添加到缓冲区
+    for (int i = 0; i < length; i++) {
+        if (uart_buffer_index < UART_BUFFER_SIZE - 1) {
+            uart_buffer[uart_buffer_index++] = data[i];
+            
+            // 检查是否收到完整的指令帧（以'>'结尾）
+            if (data[i] == '>') {
+                uart_buffer[uart_buffer_index] = '\0'; // 添加字符串结束符
+
+                // 调试输出：打印接收到的指令帧
+               printf("Received: %s\n", uart_buffer);
+                
+                // 解析坐标数据
+                parse_coordinates(uart_buffer);
+                
+                // 重置缓冲区
+                uart_buffer_index = 0;
+            }
+        } else {
+            // 缓冲区溢出，重置
+            uart_buffer_index = 0;
+        }
+    }
+}
+
 /**
  * @brief 切换焦点到下一个文本框
  */
@@ -205,6 +273,30 @@ static void update_display_cb(lv_timer_t *timer)
         func_btn_pressed = false;
         switch_focus();
     }
+
+    // 更新显示
+    char buf[16];
+    
+    // 更新机械坐标（使用从UART解析的数据）
+    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[0]);
+    lv_label_set_text(mechanical_x, buf);
+    
+    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[1]);
+    lv_label_set_text(mechanical_y, buf);
+    
+    snprintf(buf, sizeof(buf), "%.3f", mechanical_coords[2]);
+    lv_label_set_text(mechanical_z, buf);
+    
+    // 更新工件坐标（使用从UART解析的数据）
+    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[0]);
+    lv_label_set_text(workpiece_x, buf);
+    
+    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[1]);
+    lv_label_set_text(workpiece_y, buf);
+    
+    snprintf(buf, sizeof(buf), "%.3f", workpiece_coords[2]);
+    lv_label_set_text(workpiece_z, buf);
+
     // 根据拨档状态更新轴标签 更新分中值
     char axis_char = get_current_axis_char();
     char axis_buf[2] = {axis_char, '\0'};
@@ -586,7 +678,7 @@ static void create_rotated_container(lv_obj_t *parent)
     lv_obj_center(ok_label); // 居中显示
     
     // 创建定时器更新显示
-    lv_timer_create(update_display_cb, 1000, NULL);
+    lv_timer_create(update_display_cb, 100, NULL);
 }
 
 /**

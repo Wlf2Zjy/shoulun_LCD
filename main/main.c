@@ -39,6 +39,10 @@ static volatile float axis_counts[4] = {0, 0, 0, 0};
 static volatile float axis_last_report[4] = {0, 0, 0, 0};
 volatile int current_axis = 0;
 static volatile float right_multiplier = 1.0f;
+static const char *UART_TAG = "UART";
+
+
+extern void process_uart_data(const char* data, int length);
 
 // ==================== 编码器初始化 ====================
 static void encoder_init(void) {
@@ -164,6 +168,38 @@ static void send_command_frame(float scaled_steps, int axis_index) {
 
     uart_write_bytes(UART_PORT_NUM, cmd, strlen(cmd));
     //ESP_LOGI(TAG, "发送指令: %s", cmd);
+}
+
+// ==================== UART接收任务 ====================
+static void uart_receive_task(void *arg)
+{
+    uint8_t data[128];
+    //size_t len = 0;
+    while (1) {
+        int len = uart_read_bytes(UART_PORT_NUM, data, sizeof(data) - 1, 1000 / portTICK_PERIOD_MS);
+        //ESP_LOGI(TAG, "No data received, waiting...");
+        //ESP_ERROR_CHECK(uart_get_buffered_data_len(UART_PORT_NUM, &len));
+        if (len > 0) {
+            ESP_LOGI(TAG, "No data received, waiting...");
+            data[len] = '\0'; // 添加字符串结束符
+            //ESP_LOGI(UART_TAG, "Received %d bytes: %s", len, data);
+            
+            // 处理接收到的数据
+            process_uart_data((const char*)data, len);
+        } else if (len == 0) {
+            
+            ESP_LOGI(TAG, "received, waiting...");
+            // 超时，但没有收到数据
+            //ESP_LOGD(UART_TAG, "UART read timeout, no data received");
+        } else {
+            ESP_LOGI(TAG, " waiting...");
+            // 读取错误
+            //ESP_LOGE(UART_TAG, "UART read error: %d", len);
+        }
+        
+        // 短暂延迟，避免任务占用太多CPU时间
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
 
@@ -303,6 +339,7 @@ void app_main(void)
     // 创建编码器任务
     xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
     xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
+    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 10, NULL);
 
     LCD_Init();
     BK_Light(50);
