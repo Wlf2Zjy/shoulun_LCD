@@ -190,6 +190,21 @@ static void send_command_frame(float scaled_steps, int axis_index) {
     //ESP_LOGI(TAG, "发送指令: %s", cmd);
 }
 
+// ==================== 发送中点指令帧 ====================
+static void send_midpoint_command_frame(float midpoint, int axis_index) {
+    if (estop_triggered) {
+        // 急停状态下不再发送运动指令
+        return;
+    }
+    char cmd[128];
+    
+    // 生成指令帧，格式为"&[中点]"
+    snprintf(cmd, sizeof(cmd), "&%.3f\n", midpoint);
+    
+    uart_write_bytes(UART_PORT_NUM, cmd, strlen(cmd));
+    ESP_LOGI(TAG, "发送中点指令: %s", cmd);
+}
+
 
 // ==================== 拨档初始化 ====================
 static void switch_init(void) {
@@ -313,28 +328,8 @@ static void switch_task(void *arg) {
     }
 }
 
-void app_main(void)
-{
-    ESP_LOGI(TAG, "初始化旋转编码器 + 拨档开关");
-
-    // 初始化编码器相关功能
-    uart_init();
-    encoder_init();
-    switch_init();
-    estop_init();
-    func_btn_init();
-
-    // 创建编码器任务
-    xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
-    xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
-
-    LCD_Init();
-    BK_Light(50);
-    LVGL_Init();
-    coordinate_display_init();
-
-    lv_obj_add_flag(lv_layer_sys(), LV_OBJ_FLAG_HIDDEN);  // 隐藏性能监视器标签（FPS和CPU显示）
-
+// ==================== 功能按钮i任务 ====================
+static void main_loop_task(void *arg) {
     // 模拟机械坐标更新（测试用）
     static float test_x = 0.0f, test_y = 0.0f, test_z = 0.0f;
     
@@ -355,6 +350,20 @@ void app_main(void)
                 } else if (func_btn_current_state == FUNC_BTN_STATE_CENTERING2) {
                     // 更新工件坐标
                     update_workpiece_coords(test_x, test_y, test_z);
+                } else if (func_btn_current_state == FUNC_BTN_STATE_OK) {
+                    // 获取分中值1和分中值2的文本内容
+                    const char *centering1_text = lv_textarea_get_text(centering1_value);
+                    const char *centering2_text = lv_textarea_get_text(centering2_value);
+                    
+                    // 将文本内容转换为浮点数
+                    float centering1_val = atof(centering1_text);
+                    float centering2_val = atof(centering2_text);
+                    
+                    // 计算中点
+                    float midpoint = (centering1_val + centering2_val) / 2.0f;
+                    
+                    // 发送中点指令帧
+                    send_midpoint_command_frame(midpoint, current_axis);
                 }
             }
             else {
@@ -387,4 +396,30 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(10));
         lv_timer_handler();
     }
+}
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "初始化旋转编码器 + 拨档开关");
+
+    // 初始化编码器相关功能
+    uart_init();
+    encoder_init();
+    switch_init();
+    estop_init();
+    func_btn_init();
+
+    // 创建编码器任务
+    xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
+    xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
+
+    LCD_Init();
+    BK_Light(50);
+    LVGL_Init();
+    coordinate_display_init();
+
+    lv_obj_add_flag(lv_layer_sys(), LV_OBJ_FLAG_HIDDEN);  // 隐藏性能监视器标签（FPS和CPU显示）
+
+    // 创建功能按钮任务
+    xTaskCreate(main_loop_task, "main_loop_task", 4096, NULL, 5, NULL);
 }

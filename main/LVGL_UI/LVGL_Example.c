@@ -28,8 +28,8 @@ static lv_obj_t *workpiece_x;       // 工件坐标X
 static lv_obj_t *workpiece_y;       // 工件坐标Y
 static lv_obj_t *workpiece_z;       // 工件坐标Z
 static lv_obj_t *centering_value;   // 分中值显示
-static lv_obj_t *centering1_value;  // 分中值1
-static lv_obj_t *centering2_value;  // 分中值2
+lv_obj_t *centering1_value;  // 分中值1
+lv_obj_t *centering2_value;  // 分中值2
 static lv_obj_t *ok_button;         // OK按钮对象
 
 // 轴标签对象

@@ -19,6 +19,10 @@ typedef enum {
 extern volatile func_btn_state_t func_btn_current_state;
 extern volatile bool func_btn_pressed;
 
+// 分中值输入框对象
+extern lv_obj_t *centering1_value;
+extern lv_obj_t *centering2_value;
+
 void coordinate_display_init(void);
 
 // 当功能按键状态或相关UI需刷新时调用，更新高亮与轴标签
