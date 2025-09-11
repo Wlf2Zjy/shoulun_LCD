@@ -294,9 +294,19 @@ static void send_midpoint_command_frame(float midpoint, int axis_index) {
         return;
     }
     char cmd[128];
+    char axis_char;
     
-    // 生成指令帧，格式为"&[中点]"
-    snprintf(cmd, sizeof(cmd), "&%.3f\n", midpoint);
+    // 根据轴索引确定轴字符
+    switch (axis_index) {
+        case 0: axis_char = 'X'; break;
+        case 1: axis_char = 'Y'; break;
+        case 2: axis_char = 'Z'; break;
+        case 3: axis_char = 'A'; break;
+        default: axis_char = 'X'; break;
+    }
+    
+    // 生成指令帧，格式为"G10 L2 P1 [轴][中点]"
+    snprintf(cmd, sizeof(cmd), "G10 L2 P1 %c%.3f\n", axis_char, midpoint);
     
     uart_write_bytes(UART_PORT_NUM, cmd, strlen(cmd));
     //ESP_LOGI(TAG, "发送中点指令: %s", cmd);

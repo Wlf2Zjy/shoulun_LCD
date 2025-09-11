@@ -598,13 +598,15 @@ void update_centering_values(void) {
     int axis_index = get_current_axis_index();
     
     // 根据当前功能按键状态更新对应的分中值输入框
+    // 修改需求：在分中值1轴和分中值2轴模式下都写入机械坐标值
     switch (func_btn_current_state) {
         case FUNC_BTN_STATE_CENTERING1:
             snprintf(buffer, sizeof(buffer), "%.3f", mechanical_coords[axis_index]);
             lv_textarea_set_text(centering1_value, buffer);
             break;
         case FUNC_BTN_STATE_CENTERING2:
-            snprintf(buffer, sizeof(buffer), "%.3f", workpiece_coords[axis_index]);
+            //snprintf(buffer, sizeof(buffer), "%.3f", workpiece_coords[axis_index]);
+            snprintf(buffer, sizeof(buffer), "%.3f", mechanical_coords[axis_index]);
             lv_textarea_set_text(centering2_value, buffer);
             break;
         default:
