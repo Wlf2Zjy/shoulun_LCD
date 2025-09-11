@@ -23,10 +23,6 @@ extern volatile bool func_btn_pressed;
 extern lv_obj_t *centering1_value;
 extern lv_obj_t *centering2_value;
 
-// 机械坐标和工件坐标数组
-extern float mechanical_coords[3];
-extern float workpiece_coords[3];
-
 void coordinate_display_init(void);
 
 // 当功能按键状态或相关UI需刷新时调用，更新高亮与轴标签
@@ -38,10 +34,10 @@ void update_centering_values(void);
 // 获取当前轴索引
 int get_current_axis_index(void);
 
-void update_mechanical_coords(float x, float y, float z);
-
-// 更新工件坐标
-void update_workpiece_coords(float x, float y, float z);
+void update_mechanical_coords(float x, float y, float z);  // 更新机械坐标
+void update_workpiece_coords(float x, float y, float z);  // 更新工件坐标
+void update_centering_values(void);
+void ui_update_on_state_change(void);
 
 
 

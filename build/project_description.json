@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "ESP32-C6-LCD-1.47-Test",
-    "project_version":    "a863bba-dirty",
+    "project_version":    "8fbc2ee-dirty",
     "project_path":       "D:/soft/ESP32-C6-LCD-1.47-Test",
     "idf_path":           "C:/Users/Elephant/esp/v5.5/esp-idf",
     "build_dir":          "D:/soft/ESP32-C6-LCD-1.47-Test/build",

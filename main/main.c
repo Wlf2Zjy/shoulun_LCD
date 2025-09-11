@@ -12,22 +12,22 @@
 #include "driver/uart.h"         // UART 驱动
 #include <string.h>
 
-#define ENCODER_A GPIO_NUM_1
-#define ENCODER_B GPIO_NUM_0
+#define ENCODER_A GPIO_NUM_1  //A相接开发板1
+#define ENCODER_B GPIO_NUM_0  //B相接开发板2，地是3，电压是4
 #define LEFT_SW1 GPIO_NUM_4    // X轴选择开关(开发板上的2，拨档的10)以下拨档仅限5个档位那款
 #define LEFT_SW2 GPIO_NUM_5    // Y轴选择开关（开发板1，拨档的11）
 #define LEFT_SW3 GPIO_NUM_3    // Z轴选择开关（开发板的3，拨档的13）
 #define LEFT_SW4 GPIO_NUM_2    // A轴选择开关（开发板的4，拨档的14）
-#define RIGHT_SW1 GPIO_NUM_9
-#define RIGHT_SW2 GPIO_NUM_18
-#define RIGHT_SW3 GPIO_NUM_19
+#define RIGHT_SW1 GPIO_NUM_9  //0.1倍（开发板1，拨档14）
+#define RIGHT_SW2 GPIO_NUM_18  //1倍（开发板2，拨档16）
+#define RIGHT_SW3 GPIO_NUM_19  //5倍（开发板3，拨档17）
 #define UART_PORT_NUM UART_NUM_0
-#define UART_TX_PIN GPIO_NUM_16
-#define UART_RX_PIN GPIO_NUM_17
+#define UART_TX_PIN GPIO_NUM_16  // TX接开发板1
+#define UART_RX_PIN GPIO_NUM_17  // RX接开发板2
 #define UART_BAUD_RATE 115200
-#define ESTOP_PIN GPIO_NUM_23
+#define ESTOP_PIN GPIO_NUM_23  // 紧急停止按钮(开发板接ON接1，c接地)
 #define ESTOP_DEBOUNCE_MS 50    // 防抖时间 50ms
-#define FUNC_BTN_PIN GPIO_NUM_20
+#define FUNC_BTN_PIN GPIO_NUM_20  // 功能按键
 #define FUNC_BTN_DEBOUNCE_MS 500 // 功能键防抖 500ms
 
 // 全局变量声明
@@ -46,6 +46,13 @@ static volatile float right_multiplier = 1.0f;
 // 功能按键状态变量
 volatile func_btn_state_t func_btn_current_state = FUNC_BTN_STATE_CENTERING1;
 volatile bool func_btn_pressed = false;
+
+#define COORDINATE_BUFFER_SIZE 128
+static char coordinate_buffer[COORDINATE_BUFFER_SIZE];
+static int coordinate_buffer_index = 0;
+static volatile bool coordinate_updated = false;
+static float received_mechanical_coords[4] = {0, 0, 0, 0}; // X, Y, Z, A
+static float received_workpiece_coords[4] = {0, 0, 0, 0};  // X, Y, Z, A
 
 // ==================== 编码器初始化 ====================
 static void encoder_init(void) {
@@ -83,6 +90,95 @@ static void uart_init(void) {
     uart_param_config(UART_PORT_NUM, &uart_config);
     uart_set_pin(UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN,
                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
+// ==================== UART 接收配置 ====================
+static void uart_receive_config(void) {
+    // 配置UART接收参数
+    uart_param_config(UART_PORT_NUM, &(uart_config_t){
+        .baud_rate = UART_BAUD_RATE,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    });
+    
+    // 安装UART驱动，设置接收缓冲区
+    uart_driver_install(UART_PORT_NUM, 1024, 1024, 10, NULL, 0);
+}
+
+// ==================== 接收坐标解析函数 ====================
+static bool parse_coordinate_frame(const char* buffer) {
+    // 查找MPos和WPos字段
+    const char* mpos_start = strstr(buffer, "MPos:");
+    const char* wpos_start = strstr(buffer, "WPos:");
+    
+    if (!mpos_start || !wpos_start) {
+        return false;
+    }
+    
+    // 解析机械坐标
+    if (sscanf(mpos_start, "MPos:%f,%f,%f,%f", 
+               &received_mechanical_coords[0], 
+               &received_mechanical_coords[1], 
+               &received_mechanical_coords[2], 
+               &received_mechanical_coords[3]) != 4) {
+        return false;
+    }
+    
+    // 解析工件坐标
+    if (sscanf(wpos_start, "WPos:%f,%f,%f,%f", 
+               &received_workpiece_coords[0], 
+               &received_workpiece_coords[1], 
+               &received_workpiece_coords[2], 
+               &received_workpiece_coords[3]) != 4) {
+        return false;
+    }
+    
+    return true;
+}
+
+// ==================== UART 接收任务 ====================
+static void uart_receive_task(void *arg) {
+    uint8_t data[128];
+    int length = 0;
+    
+    while (1) {
+        // 读取UART数据
+        length = uart_read_bytes(UART_PORT_NUM, data, sizeof(data) - 1, 20 / portTICK_PERIOD_MS);
+        
+        if (length > 0) {
+            data[length] = '\0'; // 添加字符串结束符
+            
+            // 处理接收到的每个字符
+            for (int i = 0; i < length; i++) {
+                // 如果遇到帧开始符 '<'
+                if (data[i] == '<') {
+                    coordinate_buffer_index = 0;
+                    coordinate_buffer[coordinate_buffer_index++] = data[i];
+                } 
+                // 如果遇到帧结束符 '>'
+                else if (data[i] == '>' && coordinate_buffer_index > 0) {
+                    coordinate_buffer[coordinate_buffer_index++] = data[i];
+                    coordinate_buffer[coordinate_buffer_index] = '\0'; // 确保字符串结束
+                    
+                    // 解析坐标帧
+                    if (parse_coordinate_frame(coordinate_buffer)) {
+                        coordinate_updated = true;
+                    }
+                    
+                    coordinate_buffer_index = 0; // 重置缓冲区索引
+                } 
+                // 如果正在收集帧数据
+                else if (coordinate_buffer_index > 0 && coordinate_buffer_index < COORDINATE_BUFFER_SIZE - 1) {
+                    coordinate_buffer[coordinate_buffer_index++] = data[i];
+                }
+            }
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
 // ==================== 功能按键初始化 ====================
@@ -267,58 +363,6 @@ static type read_switch_stable_##type(type (*read_func)(void), type last_value) 
 DEFINE_SWITCH_STABLE(char)
 DEFINE_SWITCH_STABLE(float)
 
-// ==================== 串口数据解析函数 ====================
-static bool parse_coordinates(const char* data, float* mpos_x, float* mpos_y, float* mpos_z, float* wpos_x, float* wpos_y, float* wpos_z) {
-    // 解析格式为 <MPos:0.000,0.000,0.000,0.000|WPos:0.000,0.000,0.000,0.000>
-    // 我们只提取XYZ的数据
-    int result = sscanf(data, "<MPos:%f,%f,%f,%*f|WPos:%f,%f,%f,%*f>", 
-                        mpos_x, mpos_y, mpos_z, 
-                        wpos_x, wpos_y, wpos_z);
-    
-    // 成功解析6个浮点数返回true
-    return result == 6;
-}
-
-// ==================== 串口数据接收任务 ====================
-static void uart_receive_task(void *arg) {
-    uint8_t buffer[256];
-    char line_buffer[256];
-    int line_index = 0;
-    
-    while (1) {
-        // 从UART读取数据
-        int len = uart_read_bytes(UART_PORT_NUM, buffer, sizeof(buffer) - 1, 20 / portTICK_PERIOD_MS);
-        
-        if (len > 0) {
-            for (int i = 0; i < len; i++) {
-                // 将字符添加到行缓冲区
-                line_buffer[line_index++] = buffer[i];
-                
-                // 如果遇到换行符或者缓冲区满了，处理一行数据
-                if (buffer[i] == '\n' || line_index >= sizeof(line_buffer) - 1) {
-                    line_buffer[line_index] = '\0';
-                    line_index = 0;
-                    
-                    // 解析坐标数据
-                    float mpos_x, mpos_y, mpos_z, wpos_x, wpos_y, wpos_z;
-                    if (parse_coordinates(line_buffer, &mpos_x, &mpos_y, &mpos_z, &wpos_x, &wpos_y, &wpos_z)) {
-                        // 更新机械坐标和工件坐标显示
-                        update_mechanical_coords(mpos_x, mpos_y, mpos_z);
-                        update_workpiece_coords(wpos_x, wpos_y, wpos_z);
-                    }
-                }
-            }
-        } else if (len == 0) {
-            // 如果缓冲区满了但没有换行符，重置索引以避免缓冲区溢出
-            if (line_index >= sizeof(line_buffer) - 1) {
-                line_index = 0;
-            }
-        }
-        
-        // 短暂延迟
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
 
 // ==================== 编码器轮询任务 ====================
 //每20ms检测一次，有位移就输出，没有位移就不输出
@@ -385,22 +429,48 @@ static void switch_task(void *arg) {
 // ==================== 功能按钮任务 ====================
 static void main_loop_task(void *arg) {
     while (1) {
-        // 处理功能按键状态切换
+        // 检查是否有新的坐标数据需要更新
+        if (coordinate_updated) {
+            coordinate_updated = false;
+            
+            // 更新机械坐标显示 (只使用XYZ，忽略A轴)
+            update_mechanical_coords(
+                received_mechanical_coords[0],
+                received_mechanical_coords[1],
+                received_mechanical_coords[2]
+            );
+            
+            // 更新工件坐标显示 (只使用XYZ，忽略A轴)
+            update_workpiece_coords(
+                received_workpiece_coords[0],
+                received_workpiece_coords[1],
+                received_workpiece_coords[2]
+            );
+        }
+        
         if (func_btn_pressed) {
             func_btn_pressed = false;  // 清除按键标志
             
             // 检测长按
             if (is_func_btn_long_pressed()) {
-                // 长按2秒，更新分中值输入框
+                // 更新分中值输入框
                 update_centering_values();
                 
                 // 根据当前状态更新坐标
                 if (func_btn_current_state == FUNC_BTN_STATE_CENTERING1) {
-                    // 更新机械坐标（使用当前显示的坐标值）
-                    update_mechanical_coords(mechanical_coords[0], mechanical_coords[1], mechanical_coords[2]);
+                    // 更新机械坐标（使用接收到的坐标值）
+                    update_mechanical_coords(
+                        received_mechanical_coords[0],
+                        received_mechanical_coords[1],
+                        received_mechanical_coords[2]
+                    );
                 } else if (func_btn_current_state == FUNC_BTN_STATE_CENTERING2) {
-                    // 更新工件坐标（使用当前显示的坐标值）
-                    update_workpiece_coords(workpiece_coords[0], workpiece_coords[1], workpiece_coords[2]);
+                    // 更新工件坐标（使用接收到的坐标值）
+                    update_workpiece_coords(
+                        received_workpiece_coords[0],
+                        received_workpiece_coords[1],
+                        received_workpiece_coords[2]
+                    );
                 } else if (func_btn_current_state == FUNC_BTN_STATE_OK) {
                     // 获取分中值1和分中值2的文本内容
                     const char *centering1_text = lv_textarea_get_text(centering1_value);
@@ -448,6 +518,7 @@ void app_main(void)
 
     // 初始化编码器相关功能
     uart_init();
+    uart_receive_config();  
     encoder_init();
     switch_init();
     estop_init();
@@ -456,7 +527,7 @@ void app_main(void)
     // 创建编码器任务
     xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
     xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
-    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 5, NULL);
+    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 4, NULL);  
 
     LCD_Init();
     BK_Light(50);

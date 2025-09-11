@@ -42,8 +42,6 @@ float workpiece_coords[3] = {0.0f, 0.0f, 0.0f};  // 工件坐标X, Y, Z
 // 外部声明的拨档状态变量（来自编码器代码）
 extern volatile int current_axis; // 当前选择的轴 (0=X, 1=Y, 2=Z, 3=A)
 
-
-
 /**********************
  *  STATIC FUNCTIONS
  **********************/
@@ -589,8 +587,6 @@ void coordinate_display_init(void)
     
     // 创建旋转的界面
     create_rotated_container(lv_scr_act());
-
-
 }
 
 
