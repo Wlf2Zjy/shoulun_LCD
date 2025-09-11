@@ -410,13 +410,12 @@ static void encoder_poll_task(void *arg) {
 static void switch_task(void *arg) {
     char left_pos = 0;
     float right_pos = 1.0f;
-    //bool initialized = false; // 添加初始化标志
     while (1) {
         char new_left = read_switch_stable_char(read_left_switch_raw, left_pos);
         float new_right = read_switch_stable_float(read_right_switch_raw, right_pos);
 
         if (new_left != left_pos || new_right != right_pos) {
-            if (new_left != 0) {
+            if (new_left != left_pos && new_left != 0) {
                 left_pos = new_left;
                 switch (new_left) {
                     case 'X': current_axis = 0; break;
@@ -424,9 +423,11 @@ static void switch_task(void *arg) {
                     case 'Z': current_axis = 2; break;
                     case 'A': current_axis = 3; break;
                 }
+                // 请求更新轴标签（不直接调用UI函数）
+                request_axis_labels_update();
                 //ESP_LOGI(TAG, "切换到轴: %c", new_left);
             }
-            if (new_right != 0.0f) {
+            if (new_right != right_pos && new_right != 0.0f) {
                 right_pos = new_right;
                 right_multiplier = right_pos;
                 //ESP_LOGI(TAG, "倍率调整: ×%.1f", right_pos);
@@ -439,6 +440,9 @@ static void switch_task(void *arg) {
 // ==================== 功能按钮任务 ====================
 static void main_loop_task(void *arg) {
     while (1) {
+        // 检查并更新轴标签（如果需要）
+        check_and_update_axis_labels();
+        
         // 检查是否有新的坐标数据需要更新
         if (coordinate_updated) {
             coordinate_updated = false;
@@ -458,6 +462,7 @@ static void main_loop_task(void *arg) {
             );
         }
         
+        // 原有的功能按钮处理代码保持不变
         if (func_btn_pressed) {
             func_btn_pressed = false;  // 清除按键标志
             

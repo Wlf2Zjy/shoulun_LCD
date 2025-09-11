@@ -152,6 +152,38 @@ static char get_current_axis_char(void)
     }
 }
 
+
+// 添加一个安全标志，确保UI更新只在主循环任务中执行
+static volatile bool axis_labels_need_update = false;
+
+// 安全更新轴标签的函数
+void safe_update_axis_labels(void) {
+    char axis_char = get_current_axis_char();
+    char axis_buf[2] = {axis_char, '\0'};
+    
+    // 更新分中值标签
+    lv_label_set_text(centering_value, axis_buf);
+    
+    // 更新分中值1轴标签
+    lv_label_set_text(axis_label_small1, axis_buf);
+    
+    // 更新分中值2轴标签
+    lv_label_set_text(axis_label_small2, axis_buf);
+}
+
+// 设置需要更新轴标签的标志
+void request_axis_labels_update(void) {
+    axis_labels_need_update = true;
+}
+
+// 检查并执行轴标签更新（在主循环任务中调用）
+void check_and_update_axis_labels(void) {
+    if (axis_labels_need_update) {
+        axis_labels_need_update = false;
+        safe_update_axis_labels();
+    }
+}
+
 /**
  * @brief UI状态更新：根据当前轴与功能键状态刷新标签与高亮
  */
@@ -587,6 +619,9 @@ void coordinate_display_init(void)
     
     // 创建旋转的界面
     create_rotated_container(lv_scr_act());
+    
+    // 初始化轴标签（直接调用，因为这是在主任务中）
+    safe_update_axis_labels();
 }
 
 

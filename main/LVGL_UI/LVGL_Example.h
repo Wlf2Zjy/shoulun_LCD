@@ -39,5 +39,7 @@ void update_workpiece_coords(float x, float y, float z);  // 更新工件坐标
 void update_centering_values(void);
 void ui_update_on_state_change(void);
 
-
+// 添加函数声明
+void request_axis_labels_update(void);
+void check_and_update_axis_labels(void);
 
