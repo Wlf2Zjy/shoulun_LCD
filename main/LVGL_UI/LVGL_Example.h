@@ -23,6 +23,10 @@ extern volatile bool func_btn_pressed;
 extern lv_obj_t *centering1_value;
 extern lv_obj_t *centering2_value;
 
+// 机械坐标和工件坐标数组
+extern float mechanical_coords[3];
+extern float workpiece_coords[3];
+
 void coordinate_display_init(void);
 
 // 当功能按键状态或相关UI需刷新时调用，更新高亮与轴标签

@@ -1,7 +1,8 @@
 #include "ST7789.h"
-#include "LVGL_Example.h"
+#include "LVGL_UI/LVGL_Example.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"   // FreeRTOS实时操作系统核心库
 #include "freertos/task.h"
 #include "driver/gpio.h"         // ESP32 GPIO驱动程序
@@ -13,21 +14,21 @@
 
 #define ENCODER_A GPIO_NUM_1
 #define ENCODER_B GPIO_NUM_0
-#define LEFT_SW1 GPIO_NUM_4
-#define LEFT_SW2 GPIO_NUM_5
-#define LEFT_SW3 GPIO_NUM_3
-#define LEFT_SW4 GPIO_NUM_2
+#define LEFT_SW1 GPIO_NUM_4    // X轴选择开关(开发板上的2，拨档的10)以下拨档仅限5个档位那款
+#define LEFT_SW2 GPIO_NUM_5    // Y轴选择开关（开发板1，拨档的11）
+#define LEFT_SW3 GPIO_NUM_3    // Z轴选择开关（开发板的3，拨档的13）
+#define LEFT_SW4 GPIO_NUM_2    // A轴选择开关（开发板的4，拨档的14）
 #define RIGHT_SW1 GPIO_NUM_9
 #define RIGHT_SW2 GPIO_NUM_18
 #define RIGHT_SW3 GPIO_NUM_19
 #define UART_PORT_NUM UART_NUM_0
-#define UART_TX_PIN GPIO_NUM_21
-#define UART_RX_PIN GPIO_NUM_22
+#define UART_TX_PIN GPIO_NUM_16
+#define UART_RX_PIN GPIO_NUM_17
 #define UART_BAUD_RATE 115200
 #define ESTOP_PIN GPIO_NUM_23
 #define ESTOP_DEBOUNCE_MS 50    // 防抖时间 50ms
 #define FUNC_BTN_PIN GPIO_NUM_20
-#define FUNC_BTN_DEBOUNCE_MS 500 // 功能键防抖 80ms
+#define FUNC_BTN_DEBOUNCE_MS 500 // 功能键防抖 500ms
 
 // 全局变量声明
 static const char *TAG = "ENCODER";
@@ -202,7 +203,7 @@ static void send_midpoint_command_frame(float midpoint, int axis_index) {
     snprintf(cmd, sizeof(cmd), "&%.3f\n", midpoint);
     
     uart_write_bytes(UART_PORT_NUM, cmd, strlen(cmd));
-    ESP_LOGI(TAG, "发送中点指令: %s", cmd);
+    //ESP_LOGI(TAG, "发送中点指令: %s", cmd);
 }
 
 
@@ -266,6 +267,59 @@ static type read_switch_stable_##type(type (*read_func)(void), type last_value) 
 DEFINE_SWITCH_STABLE(char)
 DEFINE_SWITCH_STABLE(float)
 
+// ==================== 串口数据解析函数 ====================
+static bool parse_coordinates(const char* data, float* mpos_x, float* mpos_y, float* mpos_z, float* wpos_x, float* wpos_y, float* wpos_z) {
+    // 解析格式为 <MPos:0.000,0.000,0.000,0.000|WPos:0.000,0.000,0.000,0.000>
+    // 我们只提取XYZ的数据
+    int result = sscanf(data, "<MPos:%f,%f,%f,%*f|WPos:%f,%f,%f,%*f>", 
+                        mpos_x, mpos_y, mpos_z, 
+                        wpos_x, wpos_y, wpos_z);
+    
+    // 成功解析6个浮点数返回true
+    return result == 6;
+}
+
+// ==================== 串口数据接收任务 ====================
+static void uart_receive_task(void *arg) {
+    uint8_t buffer[256];
+    char line_buffer[256];
+    int line_index = 0;
+    
+    while (1) {
+        // 从UART读取数据
+        int len = uart_read_bytes(UART_PORT_NUM, buffer, sizeof(buffer) - 1, 20 / portTICK_PERIOD_MS);
+        
+        if (len > 0) {
+            for (int i = 0; i < len; i++) {
+                // 将字符添加到行缓冲区
+                line_buffer[line_index++] = buffer[i];
+                
+                // 如果遇到换行符或者缓冲区满了，处理一行数据
+                if (buffer[i] == '\n' || line_index >= sizeof(line_buffer) - 1) {
+                    line_buffer[line_index] = '\0';
+                    line_index = 0;
+                    
+                    // 解析坐标数据
+                    float mpos_x, mpos_y, mpos_z, wpos_x, wpos_y, wpos_z;
+                    if (parse_coordinates(line_buffer, &mpos_x, &mpos_y, &mpos_z, &wpos_x, &wpos_y, &wpos_z)) {
+                        // 更新机械坐标和工件坐标显示
+                        update_mechanical_coords(mpos_x, mpos_y, mpos_z);
+                        update_workpiece_coords(wpos_x, wpos_y, wpos_z);
+                    }
+                }
+            }
+        } else if (len == 0) {
+            // 如果缓冲区满了但没有换行符，重置索引以避免缓冲区溢出
+            if (line_index >= sizeof(line_buffer) - 1) {
+                line_index = 0;
+            }
+        }
+        
+        // 短暂延迟
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 // ==================== 编码器轮询任务 ====================
 //每20ms检测一次，有位移就输出，没有位移就不输出
 static void encoder_poll_task(void *arg) {
@@ -328,11 +382,8 @@ static void switch_task(void *arg) {
     }
 }
 
-// ==================== 功能按钮i任务 ====================
+// ==================== 功能按钮任务 ====================
 static void main_loop_task(void *arg) {
-    // 模拟机械坐标更新（测试用）
-    static float test_x = 0.0f, test_y = 0.0f, test_z = 0.0f;
-    
     while (1) {
         // 处理功能按键状态切换
         if (func_btn_pressed) {
@@ -345,11 +396,11 @@ static void main_loop_task(void *arg) {
                 
                 // 根据当前状态更新坐标
                 if (func_btn_current_state == FUNC_BTN_STATE_CENTERING1) {
-                    // 更新机械坐标
-                    update_mechanical_coords(test_x, test_y, test_z);
+                    // 更新机械坐标（使用当前显示的坐标值）
+                    update_mechanical_coords(mechanical_coords[0], mechanical_coords[1], mechanical_coords[2]);
                 } else if (func_btn_current_state == FUNC_BTN_STATE_CENTERING2) {
-                    // 更新工件坐标
-                    update_workpiece_coords(test_x, test_y, test_z);
+                    // 更新工件坐标（使用当前显示的坐标值）
+                    update_workpiece_coords(workpiece_coords[0], workpiece_coords[1], workpiece_coords[2]);
                 } else if (func_btn_current_state == FUNC_BTN_STATE_OK) {
                     // 获取分中值1和分中值2的文本内容
                     const char *centering1_text = lv_textarea_get_text(centering1_value);
@@ -387,17 +438,10 @@ static void main_loop_task(void *arg) {
             }
         }
         
-        // 模拟机械坐标更新（测试用）
-        test_x += 0.001f;
-        test_y += 0.002f;
-        test_z += 0.003f;
-        update_mechanical_coords(test_x, test_y, test_z);
-        
         vTaskDelay(pdMS_TO_TICKS(10));
         lv_timer_handler();
     }
 }
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "初始化旋转编码器 + 拨档开关");
@@ -412,6 +456,7 @@ void app_main(void)
     // 创建编码器任务
     xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
     xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
+    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 5, NULL);
 
     LCD_Init();
     BK_Light(50);
@@ -423,3 +468,4 @@ void app_main(void)
     // 创建功能按钮任务
     xTaskCreate(main_loop_task, "main_loop_task", 4096, NULL, 5, NULL);
 }
+

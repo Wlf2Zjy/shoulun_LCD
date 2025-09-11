@@ -36,8 +36,8 @@ static lv_obj_t *ok_button;         // OK按钮对象
 static lv_obj_t *axis_label_small1; // 分中值1轴标签
 static lv_obj_t *axis_label_small2; // 分中值2轴标签
 
-static float mechanical_coords[3] = {0.0f, 0.0f, 0.0f}; // 机械坐标X, Y, Z
-static float workpiece_coords[3] = {0.0f, 0.0f, 0.0f};  // 工件坐标X, Y, Z
+float mechanical_coords[3] = {0.0f, 0.0f, 0.0f}; // 机械坐标X, Y, Z
+float workpiece_coords[3] = {0.0f, 0.0f, 0.0f};  // 工件坐标X, Y, Z
 
 // 外部声明的拨档状态变量（来自编码器代码）
 extern volatile int current_axis; // 当前选择的轴 (0=X, 1=Y, 2=Z, 3=A)
@@ -329,7 +329,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // X轴坐标值显示
     mechanical_x = lv_label_create(axis_item_x1);
-    lv_label_set_text(mechanical_x, "5.000"); // 设置初始文本
+    lv_label_set_text(mechanical_x, "0.000"); // 设置初始文本
     lv_obj_add_style(mechanical_x, &style_value_box, 0); // 应用样式
     
     // Y轴坐标显示
@@ -350,7 +350,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // Y轴坐标值显示
     mechanical_y = lv_label_create(axis_item_y1);
-    lv_label_set_text(mechanical_y, "5.000"); // 设置初始文本
+    lv_label_set_text(mechanical_y, "0.000"); // 设置初始文本
     lv_obj_add_style(mechanical_y, &style_value_box, 0); // 应用样式
     
     // Z轴坐标显示
@@ -371,7 +371,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // Z轴坐标值显示
     mechanical_z = lv_label_create(axis_item_z1);
-    lv_label_set_text(mechanical_z, "5.000"); // 设置初始文本
+    lv_label_set_text(mechanical_z, "0.000"); // 设置初始文本
     lv_obj_add_style(mechanical_z, &style_value_box, 0); // 应用样式
     
     // 第二行坐标 (工件坐标)
@@ -409,7 +409,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // X轴坐标值显示
     workpiece_x = lv_label_create(axis_item_x2);
-    lv_label_set_text(workpiece_x, "6.000"); // 设置初始文本
+    lv_label_set_text(workpiece_x, "0.000"); // 设置初始文本
     lv_obj_add_style(workpiece_x, &style_value_box, 0); // 应用样式
     
     // Y轴坐标显示
@@ -430,7 +430,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // Y轴坐标值显示
     workpiece_y = lv_label_create(axis_item_y2);
-    lv_label_set_text(workpiece_y, "6.000"); // 设置初始文本
+    lv_label_set_text(workpiece_y, "0.000"); // 设置初始文本
     lv_obj_add_style(workpiece_y, &style_value_box, 0); // 应用样式
     
     // Z轴坐标显示
@@ -451,7 +451,7 @@ static void create_rotated_container(lv_obj_t *parent)
     
     // Z轴坐标值显示
     workpiece_z = lv_label_create(axis_item_z2);
-    lv_label_set_text(workpiece_z, "6.000"); // 设置初始文本
+    lv_label_set_text(workpiece_z, "0.000"); // 设置初始文本
     lv_obj_add_style(workpiece_z, &style_value_box, 0); // 应用样式
     
     // 创建底部区域 - 分中功能区域

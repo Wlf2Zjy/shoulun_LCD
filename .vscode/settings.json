@@ -31,13 +31,14 @@
     "stdbool.h": "c",
     "lvgl_driver.h": "c",
     "esp_lcd_panel_interface.h": "c",
-    "lv_demos.h": "c"
+    "lv_demos.h": "c",
+    "gpio.h": "c"
   },
   "idf.adapterTargetName": "esp32c6",
   "idf.openOcdConfigs": [
     "board/esp32c6-builtin.cfg"
   ],
-  "idf.portWin": "COM9",
+  "idf.portWin": "COM10",
   "idf.flashType": "UART",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32c6"

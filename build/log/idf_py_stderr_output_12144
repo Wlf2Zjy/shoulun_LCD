@@ -1,7 +1,7 @@
-Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Users\Elephant\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32c6 -DCCACHE_ENABLE=0 D:\soft\ESP32-C6-LCD-1.47-Test
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Users\Elephant\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DCCACHE_ENABLE=1 D:\soft\ESP32-C6-LCD-1.47-Test
 info: INFO: Symbol LV_MEM_SIZE_KILOBYTES defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
-    D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:73
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:2
+    D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:73
 info: INFO: Symbol LV_USE_DEMO_WIDGETS defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:6
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:1090
@@ -15,17 +15,17 @@ info: INFO: Symbol LV_USE_DEMO_BENCHMARK defined in multiple locations (see belo
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:19
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:1102
 info: INFO: Symbol LV_USE_DEMO_STRESS defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
-    D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:1110
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:23
+    D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:1110
 info: INFO: Symbol LV_USE_DEMO_MUSIC defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:27
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:1114
 info: INFO: Symbol LV_FONT_MONTSERRAT_12 defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
-    D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:32
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:497
+    D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:32
 info: INFO: Symbol LV_FONT_MONTSERRAT_14 defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
-    D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:36
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:499
+    D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:36
 info: INFO: Symbol LV_FONT_MONTSERRAT_16 defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
     D:\soft\ESP32-C6-LCD-1.47-Test\components\lvgl__lvgl\Kconfig:502
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:40
@@ -38,3 +38,22 @@ info: INFO: Symbol BT_BLE_50_FEATURES_SUPPORTED defined in multiple locations (s
 info: INFO: Symbol BT_BLE_42_FEATURES_SUPPORTED defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
     C:\Users\Elephant\esp\v5.5\esp-idf\components\bt\host\bluedroid\Kconfig.in:1353
     D:\soft\ESP32-C6-LCD-1.47-Test\main\Kconfig.projbuild:54
+CMake Error at C:/Users/Elephant/esp/v5.5/esp-idf/tools/cmake/component.cmake:491 (add_library):
+  Cannot find source file:
+
+    D:/soft/ESP32-C6-LCD-1.47-Test/main/COMPILE_DEFINITIONS
+
+  Tried extensions .c .C .c++ .cc .cpp .cxx .cu .mpp .m .M .mm .ixx .cppm
+  .ccm .cxxm .c++m .h .hh .h++ .hm .hpp .hxx .in .txx .f .F .for .f77 .f90
+  .f95 .f03 .hip .ispc
+Call Stack (most recent call first):
+  main/CMakeLists.txt:1 (idf_component_register)
+
+
+CMake Error at C:/Users/Elephant/esp/v5.5/esp-idf/tools/cmake/component.cmake:491 (add_library):
+  No SOURCES given to target: __idf_main
+Call Stack (most recent call first):
+  main/CMakeLists.txt:1 (idf_component_register)
+
+
+CMake Generate step failed.  Build files cannot be regenerated correctly.
