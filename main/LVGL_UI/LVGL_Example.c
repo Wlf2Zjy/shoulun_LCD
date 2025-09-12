@@ -243,7 +243,7 @@ void ui_update_on_state_change(void)
 }
 /**
  * @brief 创建旋转的容器来放置所有界面元素
- * 由于屏幕可能是竖屏，但需要横屏显示，因此创建旋转容器
+ * 由于屏幕是竖屏，但需要横屏显示，因此创建旋转容器
  * @param parent 父对象
  */
 static void create_rotated_container(lv_obj_t *parent)

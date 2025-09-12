@@ -36,10 +36,9 @@ int get_current_axis_index(void);
 
 void update_mechanical_coords(float x, float y, float z);  // 更新机械坐标
 void update_workpiece_coords(float x, float y, float z);  // 更新工件坐标
-void update_centering_values(void);
-void ui_update_on_state_change(void);
+void update_centering_values(void);  // 更新分中值输入框
+void ui_update_on_state_change(void);  // UI状态更新
 
-// 添加函数声明
-void request_axis_labels_update(void);
-void check_and_update_axis_labels(void);
+void request_axis_labels_update(void);  // 请求更新轴标签
+void check_and_update_axis_labels(void);  // 检查并执行轴标签更新
 

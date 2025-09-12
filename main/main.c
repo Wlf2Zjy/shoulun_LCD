@@ -1,16 +1,16 @@
 #include "ST7789.h"
 #include "LVGL_UI/LVGL_Example.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdio.h>  
+#include <stdlib.h>  
 #include "freertos/FreeRTOS.h"   // FreeRTOS实时操作系统核心库
-#include "freertos/task.h"
+#include "freertos/task.h"    // FreeRTOS任务管理
 #include "driver/gpio.h"         // ESP32 GPIO驱动程序
 #include "driver/pcnt.h"        // ESP32脉冲计数器驱动程序
 #include "esp_log.h"
 #include <math.h>
 #include "driver/uart.h"         // UART 驱动
-#include <string.h>
+#include <string.h>       // 字符串处理函数
 
 #define ENCODER_A GPIO_NUM_1  //A相接开发板1
 #define ENCODER_B GPIO_NUM_0  //B相接开发板2，地是3，电压是4
@@ -32,25 +32,25 @@
 
 // 全局变量声明
 static const char *TAG = "ENCODER";
-static pcnt_unit_t pcnt_unit = PCNT_UNIT_0;
-static volatile bool estop_triggered = false;
-static void IRAM_ATTR estop_isr_handler(void* arg);
-static void IRAM_ATTR func_btn_isr_handler(void* arg);
-static volatile uint32_t last_estop_tick = 0;
-static volatile uint32_t last_func_btn_tick = 0;
-static volatile float axis_counts[4] = {0, 0, 0, 0};
-static volatile float axis_last_report[4] = {0, 0, 0, 0};
-volatile int current_axis = 0;
-static volatile float right_multiplier = 1.0f;
+static pcnt_unit_t pcnt_unit = PCNT_UNIT_0;  // 使用PCNT单元0
+static volatile bool estop_triggered = false;  // 急停状态标志
+static void IRAM_ATTR estop_isr_handler(void* arg);  
+static void IRAM_ATTR func_btn_isr_handler(void* arg);    
+static volatile uint32_t last_estop_tick = 0;  // 急停防抖时间戳
+static volatile uint32_t last_func_btn_tick = 0;  // 功能按键防抖时间戳
+static volatile float axis_counts[4] = {0, 0, 0, 0};  // X, Y, Z, A轴累计位移
+static volatile float axis_last_report[4] = {0, 0, 0, 0};  // 上次报告的位移
+volatile int current_axis = 0;   // 0:X, 1:Y, 2:Z, 3:A
+static volatile float right_multiplier = 1.0f;  
 
 // 功能按键状态变量
-volatile func_btn_state_t func_btn_current_state = FUNC_BTN_STATE_CENTERING1;
-volatile bool func_btn_pressed = false;
+volatile func_btn_state_t func_btn_current_state = FUNC_BTN_STATE_CENTERING1;  // 当前状态
+volatile bool func_btn_pressed = false;  // 按键按下标志
 
-#define COORDINATE_BUFFER_SIZE 128
-static char coordinate_buffer[COORDINATE_BUFFER_SIZE];
-static int coordinate_buffer_index = 0;
-static volatile bool coordinate_updated = false;
+#define COORDINATE_BUFFER_SIZE 128  // 坐标缓冲区大小
+static char coordinate_buffer[COORDINATE_BUFFER_SIZE];  // 用于存储接收到的坐标数据
+static int coordinate_buffer_index = 0;  // 当前缓冲区索引
+static volatile bool coordinate_updated = false;  // 坐标更新标志
 static float received_mechanical_coords[4] = {0, 0, 0, 0}; // X, Y, Z, A
 static float received_workpiece_coords[4] = {0, 0, 0, 0};  // X, Y, Z, A
 
@@ -462,7 +462,7 @@ static void main_loop_task(void *arg) {
             );
         }
         
-        // 原有的功能按钮处理代码保持不变
+        // 处理功能按键事件
         if (func_btn_pressed) {
             func_btn_pressed = false;  // 清除按键标志
             
@@ -534,20 +534,20 @@ void app_main(void)
     // 初始化编码器相关功能
     uart_init();
     uart_receive_config();  
-    encoder_init();
-    switch_init();
-    estop_init();
-    func_btn_init();
+    encoder_init();  //编码器初始化
+    switch_init();  //拨档初始化
+    estop_init();  //急停初始化
+    func_btn_init();  //功能按键初始化
 
     // 创建编码器任务
-    xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);
-    xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);
-    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 4, NULL);  
+    xTaskCreate(encoder_poll_task, "encoder_poll_task", 4096, NULL, 5, NULL);  // 编码器轮询任务
+    xTaskCreate(switch_task, "switch_task", 2048, NULL, 5, NULL);  // 拨档任务
+    xTaskCreate(uart_receive_task, "uart_receive_task", 4096, NULL, 4, NULL);    //串口接收任务
 
-    LCD_Init();
-    BK_Light(50);
-    LVGL_Init();
-    coordinate_display_init();
+    LCD_Init();  //LCD屏幕初始化
+    BK_Light(50);  //设置背光亮度，范围0-100
+    LVGL_Init();  //LVGL初始化
+    coordinate_display_init();  //坐标显示初始化
 
     lv_obj_add_flag(lv_layer_sys(), LV_OBJ_FLAG_HIDDEN);  // 隐藏性能监视器标签（FPS和CPU显示）
 
