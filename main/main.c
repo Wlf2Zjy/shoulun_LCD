@@ -391,12 +391,15 @@ static void encoder_poll_task(void *arg) {
             // 累加到当前轴的总位移
             axis_counts[current_axis] += scaled_steps;
             
-            // 输出增量信息
-            //ESP_LOGI(TAG, "轴: %c, 倍率: ×%.1f, 增量: %.2f", 
-                    // axis_names[current_axis], right_multiplier, scaled_steps);
-            // 发送指令帧
-                    send_command_frame(scaled_steps, current_axis);
-                    axis_last_report[current_axis] = axis_counts[current_axis];
+            // 只有当不是OFF档位时才发送指令
+            if (read_left_switch_raw() != 0) {
+                // 输出增量信息
+                //ESP_LOGI(TAG, "轴: %c, 倍率: ×%.1f, 增量: %.2f", 
+                        // axis_names[current_axis], right_multiplier, scaled_steps);
+                // 发送指令帧
+                send_command_frame(scaled_steps, current_axis);
+                axis_last_report[current_axis] = axis_counts[current_axis];
+            }
             // 清除计数器
             pcnt_counter_clear(pcnt_unit);
         }
@@ -415,17 +418,23 @@ static void switch_task(void *arg) {
         float new_right = read_switch_stable_float(read_right_switch_raw, right_pos);
 
         if (new_left != left_pos || new_right != right_pos) {
-            if (new_left != left_pos && new_left != 0) {
+            if (new_left != left_pos) {
                 left_pos = new_left;
-                switch (new_left) {
-                    case 'X': current_axis = 0; break;
-                    case 'Y': current_axis = 1; break;
-                    case 'Z': current_axis = 2; break;
-                    case 'A': current_axis = 3; break;
+                if (new_left != 0) {
+                    switch (new_left) {
+                        case 'X': current_axis = 0; break;
+                        case 'Y': current_axis = 1; break;
+                        case 'Z': current_axis = 2; break;
+                        case 'A': current_axis = 3; break;
+                    }
+                    // 请求更新轴标签（不直接调用UI函数）
+                    request_axis_labels_update();
+                    //ESP_LOGI(TAG, "切换到轴: %c", new_left);
+                } else {
+                    // OFF档位，不需要做特殊处理，只需要更新UI
+                    request_axis_labels_update();
+                    //ESP_LOGI(TAG, "切换到OFF档位");
                 }
-                // 请求更新轴标签（不直接调用UI函数）
-                request_axis_labels_update();
-                //ESP_LOGI(TAG, "切换到轴: %c", new_left);
             }
             if (new_right != right_pos && new_right != 0.0f) {
                 right_pos = new_right;
